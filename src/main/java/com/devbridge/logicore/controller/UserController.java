@@ -1,9 +1,11 @@
 package com.devbridge.logicore.controller;
 
 import com.devbridge.logicore.dto.CreateUserRequest;
+import com.devbridge.logicore.dto.ResetPasswordRequest;
 import com.devbridge.logicore.dto.UpdateUserRequest;
 import com.devbridge.logicore.dto.UserAdminResponse;
 import com.devbridge.logicore.security.AuthenticatedUser;
+import com.devbridge.logicore.service.PasswordService;
 import com.devbridge.logicore.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,9 +26,11 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final PasswordService passwordService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, PasswordService passwordService) {
         this.userService = userService;
+        this.passwordService = passwordService;
     }
 
     @GetMapping
@@ -45,5 +49,13 @@ public class UserController {
                                     @Valid @RequestBody UpdateUserRequest request,
                                     @AuthenticationPrincipal AuthenticatedUser actor) {
         return userService.update(id, request, actor.getId());
+    }
+
+    @PostMapping("/{id}/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@PathVariable Long id,
+                              @Valid @RequestBody ResetPasswordRequest request,
+                              @AuthenticationPrincipal AuthenticatedUser actor) {
+        passwordService.reset(id, request.getNewPassword(), actor.getId());
     }
 }

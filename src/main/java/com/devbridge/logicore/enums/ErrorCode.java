@@ -11,6 +11,9 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.user.notFound"),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.user.emailExists"),
     USER_SELF_CHANGE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.user.selfChange"),
+    // 400, not 401: a 401 would make the UI think the login expired and log the user out.
+    PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "error.password.incorrect"),
+    PASSWORD_UNCHANGED(HttpStatus.BAD_REQUEST, "error.password.unchanged"),
     CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.customer.notFound"),
     CUSTOMER_NAME_EXISTS(HttpStatus.CONFLICT, "error.customer.nameExists"),
     CUSTOMER_REQUIRED(HttpStatus.BAD_REQUEST, "error.customer.required"),
