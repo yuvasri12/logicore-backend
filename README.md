@@ -1,70 +1,141 @@
-﻿# LogiCore
+# LogiCore Backend
 
-LogiCore is a logistics operations app. A shipment is registered, received and shelved in the warehouse, loaded, dispatched and delivered. Every step is role-controlled and audited. Customers can track their shipment without logging in.
+**LogiCore is a freight and logistics operations system. It tracks a shipment from the moment it is registered, through the warehouse and dispatch, to delivery, and records who did every step.**
 
-This repository is the **backend** (Spring Boot REST API). The Angular frontend is in a separate repository.
+This repository is the REST API (Spring Boot). The web app is in a separate repository: `logicore-frontend`.
+
+## In plain words
+
+Imagine a courier company. A parcel arrives, someone shelves it in the warehouse, someone loads it on a truck, and someone confirms delivery. Customers keep asking "where is my parcel?"
+
+LogiCore handles that whole story:
+
+- Each staff member sees only the screens that match their job.
+- A shipment can only move forward in the right order. A parcel cannot be "delivered" before it is "dispatched".
+- Every important action is written to an audit log, so anyone can answer "who did this, and when?"
+- Customers can check their parcel with a tracking number, with no login.
+
+## Who uses it
+
+| Role | What they do |
+| --- | --- |
+| Admin | Manages users, customers and sees the audit log. Full access. |
+| Ops Manager | Runs daily operations: shipments, customers, warehouse, dispatch. |
+| Warehouse Staff | Receives freight and assigns a shelf location. |
+| Dispatcher | Assigns a vehicle and sends the shipment out. |
+| Customer (public) | Tracks a shipment by tracking number. No login needed. |
+
+## How a shipment moves
+
+```mermaid
+stateDiagram-v2
+    [*] --> NEW
+    NEW --> RECEIVED
+    RECEIVED --> IN_WAREHOUSE
+    IN_WAREHOUSE --> LOADED
+    LOADED --> IN_TRANSIT
+    IN_TRANSIT --> DELIVERED
+    NEW --> CANCELLED
+    RECEIVED --> CANCELLED
+    DELIVERED --> [*]
+    CANCELLED --> [*]
+```
+
+The rules live in one place (`ShipmentWorkflow`), and the API refuses any other jump with a clear message.
 
 ## Features
 
-- Login with JWT and four roles: Admin, Ops Manager, Warehouse, Dispatcher
-- Role-based access: each role sees and can call only what it needs
-- Shipments with a strict workflow: NEW, RECEIVED, IN_WAREHOUSE, LOADED, IN_TRANSIT, DELIVERED, CANCELLED
-- Warehouse: receive freight, assign storage location (zone, rack, bin)
-- Dispatch: assign vehicle and destination
-- Customers: create, edit, activate, deactivate
-- User management for Admin: create, edit role, enable, disable
-- Append-only audit log of important actions (Admin only)
-- Public tracking by tracking number, with a timeline and rate limiting
-- All user-facing messages in messages.properties; one global exception handler; SLF4J logging with request ids
+- Login with JWT, four roles, and role-based access on every endpoint
+- Shipment workflow with a strict state machine and full status history
+- Warehouse receiving and storage location (zone, rack, bin)
+- Dispatch with vehicle and destination
+- Customer management (create, edit, activate, deactivate), linked to shipments
+- User management for Admin (create, change role, enable, disable)
+- Password change for any user, and password reset by Admin
+- Append-only audit log, written in the same transaction as the action it records
+- Public tracking with a timeline and rate limiting (30 requests per minute per IP)
+- Login protection: 5 wrong passwords lock the account for 10 minutes
+
+## Design decisions
+
+- **Stateless security.** Spring Security with JWT. Passwords are hashed with BCrypt and never logged or returned.
+- **One error format.** A single global exception handler turns every failure into the same JSON shape with an error code.
+- **No hard-coded messages.** All user-facing text is in `messages.properties`.
+- **Traceable logs.** Every request gets a request id that appears in each log line.
+- **Safe by default in production.** The `prod` profile has no default values, so the app refuses to start unless every secret is supplied.
 
 ## Tech stack
 
-- Java, Spring Boot 2.7.18, Spring Security (stateless JWT), Spring Data JPA
-- PostgreSQL 16 (H2 in tests)
-- JUnit 5, MockMvc
+- Java, Spring Boot 2.7, Spring Security, Spring Data JPA (Hibernate)
+- PostgreSQL 16 (H2 in memory for tests)
+- JUnit 5 and MockMvc
+- Maven
 
-## Run locally
+## Quality
 
-1. Create a PostgreSQL database named `logicore`.
-2. Start the app from IntelliJ (main class `LogiCoreOmsApplication`) or run `mvn spring-boot:run`.
-3. The API runs on http://localhost:8080.
+- 49 automated tests: workflow rules, role access, login lockout, rate limiting, customers, users, passwords, audit and error handling
+- Tests run against an in-memory database, so they need no setup
 
-Local defaults (laptop only, never use in production):
+## Getting started
 
-- Database user `postgres`, password `admin`
-- First Admin: `yuvasris531@gmail.com` / `ChangeMe@123`
-- Demo users (same password): ops.manager@logicore.local, warehouse@logicore.local, dispatcher@logicore.local
+You need Java, Maven and PostgreSQL 16.
 
-Override with environment variables: LOGICORE_DB_URL, LOGICORE_DB_USER, LOGICORE_DB_PASSWORD, LOGICORE_JWT_SECRET, LOGICORE_ADMIN_EMAIL, LOGICORE_ADMIN_NAME, LOGICORE_ADMIN_PASSWORD, LOGICORE_DEMO_USERS.
+1. Create an empty PostgreSQL database named `logicore`.
+2. Set the configuration values below (the local development defaults are in `application.properties`).
+3. Start the app from your IDE (main class `LogiCoreOmsApplication`) or run:
 
-Production: run with `--spring.profiles.active=prod`. That profile has no defaults, so the app refuses to start unless every value above is set, and demo users are off.
+```
+mvn spring-boot:run
+```
 
-## Main APIs
+The API starts on http://localhost:8080. On first start it creates the first Admin account from the configuration below.
+
+## Configuration
+
+| Setting | Purpose |
+| --- | --- |
+| `LOGICORE_DB_URL`, `LOGICORE_DB_USER`, `LOGICORE_DB_PASSWORD` | Database connection |
+| `LOGICORE_JWT_SECRET` | Key used to sign login tokens |
+| `LOGICORE_ADMIN_EMAIL`, `LOGICORE_ADMIN_NAME`, `LOGICORE_ADMIN_PASSWORD` | First Admin account, created on first start |
+| `LOGICORE_DEMO_USERS` | Creates sample staff accounts for demos (leave off in production) |
+
+Run in production with `--spring.profiles.active=prod`. Keep real values in environment variables, never in the repository.
+
+## API overview
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | POST /api/auth/login, GET /api/auth/me |
-| Shipments | GET and POST /api/shipments, GET, PUT, DELETE /api/shipments/{id}, PATCH /api/shipments/{id}/status, POST /api/shipments/{id}/load, POST /api/shipments/{id}/deliver |
-| Warehouse | POST /api/warehouse/receive, POST /api/warehouse/assign-location |
-| Dispatch | POST /api/dispatch |
-| Customers | GET and POST /api/customers, PUT /api/customers/{id}, POST /api/customers/{id}/activate, POST /api/customers/{id}/deactivate |
-| Users (Admin) | GET and POST /api/users, PATCH /api/users/{id} |
-| Audit (Admin) | GET /api/audit |
-| Public tracking | GET /api/tracking/{trackingNumber} (no login) |
+| Auth | `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/change-password` |
+| Shipments | `GET` and `POST /api/shipments`, `GET`, `PUT`, `DELETE /api/shipments/{id}`, `PATCH /api/shipments/{id}/status`, `POST /api/shipments/{id}/load`, `POST /api/shipments/{id}/deliver` |
+| Warehouse | `POST /api/warehouse/receive`, `POST /api/warehouse/assign-location` |
+| Dispatch | `POST /api/dispatch` |
+| Customers | `GET` and `POST /api/customers`, `PUT /api/customers/{id}`, `POST /api/customers/{id}/activate`, `POST /api/customers/{id}/deactivate` |
+| Users (Admin) | `GET` and `POST /api/users`, `PATCH /api/users/{id}`, `POST /api/users/{id}/reset-password` |
+| Audit (Admin) | `GET /api/audit` |
+| Public tracking | `GET /api/tracking/{trackingNumber}` (no login) |
 
-## Demo flow
+## Project structure
 
-1. Log in as Admin and create a shipment for a customer.
-2. Warehouse: receive the freight, then assign zone, rack and bin.
-3. Dispatch the shipment with a vehicle and destination.
-4. Mark it delivered.
-5. Open the public tracking page with the tracking number and see the timeline.
-6. Admin: open the Audit Log and see who did each step.
+```
+src/main/java/com/devbridge/logicore
+  config/       security rules, startup data, validation
+  controller/   REST endpoints
+  service/      business logic (workflow, audit, passwords)
+  security/     JWT, rate limiting, login lockout
+  model/        database entities
+  enums/        roles, statuses, error codes
+  exception/    one global error handler
+src/main/resources/messages.properties   all user-facing text
+```
 
-## Tests
+## Known limitations and roadmap
 
-Run all tests from IntelliJ (right-click `src/test` and choose Run Tests). They use an in-memory H2 database and cover the workflow, role access, tracking, customers, users and audit.
+- A disabled user's existing token stays valid until it expires (token revocation is planned)
+- Shipment lists are not paged yet
+- Database changes use Hibernate auto-update; Flyway migrations are planned
+- Optimistic locking for simultaneous edits is planned
+- A hosted live demo is planned
 
-## Roadmap
+## Author
 
-Disabled-user token revocation, shipment pagination, optimistic locking, password change and reset, Flyway migrations, hosted live demo.
+Built by Yuvasri as a full-stack learning and showcase project.
