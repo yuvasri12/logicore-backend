@@ -25,6 +25,11 @@ public class CreateUserRequest {
     @Size(min = 8, max = 72, message = "{validation.size.min}")
     private String password;
 
+    // Where the user works. Ops Manager: regionId. Warehouse Staff / Dispatcher: warehouseId.
+    private Long regionId;
+
+    private Long warehouseId;
+
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
 
@@ -36,4 +41,10 @@ public class CreateUserRequest {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public Long getRegionId() { return regionId; }
+    public void setRegionId(Long regionId) { this.regionId = regionId; }
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
 }

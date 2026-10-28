@@ -41,7 +41,7 @@ class LoginLockoutTest {
 
     @Test
     void locksAfterFiveWrongPasswords_evenForTheCorrectPassword() throws Exception {
-        String email = "warehouse@logicore.local";
+        String email = "karthik.raja@logicore.com";
 
         for (int i = 0; i < 5; i++) {
             login(email, "wrong-password").andExpect(status().isUnauthorized());
@@ -53,7 +53,7 @@ class LoginLockoutTest {
 
     @Test
     void successfulLoginResetsTheCounter() throws Exception {
-        String email = "dispatcher@logicore.local";
+        String email = "meena.s@logicore.com";
 
         for (int i = 0; i < 4; i++) {
             login(email, "wrong-password").andExpect(status().isUnauthorized());

@@ -60,8 +60,11 @@ public class SecurityConfig {
                 .antMatchers(HttpMethod.GET, "/api/shipments/**").authenticated()
                 // user management: admin only
                 .antMatchers("/api/users", "/api/users/**").hasRole(ADMIN)
-                // audit log: admin only                                   // NEW
-                .antMatchers("/api/audit", "/api/audit/**").hasRole(ADMIN) // NEW
+                // audit log: admin only
+                .antMatchers("/api/audit", "/api/audit/**").hasRole(ADMIN)
+                // organisation (regions, warehouses): admin manages, ops manager can read for pickers
+                .antMatchers(HttpMethod.GET, "/api/org/**").hasAnyRole(ADMIN, OPS)
+                .antMatchers("/api/org", "/api/org/**").hasRole(ADMIN)
                 // customers: admin and ops manager
                 .antMatchers("/api/customers", "/api/customers/**").hasAnyRole(ADMIN, OPS)
                 // shipments

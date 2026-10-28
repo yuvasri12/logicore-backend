@@ -29,6 +29,16 @@ public class AppUser {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    // Scope: where this user works. Admin has none (sees everything).
+    // Ops Manager is scoped by region; Warehouse Staff and Dispatcher by warehouse.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id")
+    private Region region;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -53,6 +63,12 @@ public class AppUser {
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+
+    public Region getRegion() { return region; }
+    public void setRegion(Region region) { this.region = region; }
+
+    public Warehouse getWarehouse() { return warehouse; }
+    public void setWarehouse(Warehouse warehouse) { this.warehouse = warehouse; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

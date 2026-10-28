@@ -22,6 +22,11 @@ public class UpdateShipmentRequest {
     @NotBlank
     private String destination;
 
+    // Where the shipment starts and ends, as warehouses. They decide who may see it.
+    private Long originWarehouseId;
+
+    private Long destinationWarehouseId;
+
     @NotNull
     private ShipmentMode mode;
 
@@ -59,6 +64,22 @@ public class UpdateShipmentRequest {
 
     public void setDestination(String destination) {
         this.destination = destination;
+    }
+
+    public Long getOriginWarehouseId() {
+        return originWarehouseId;
+    }
+
+    public void setOriginWarehouseId(Long originWarehouseId) {
+        this.originWarehouseId = originWarehouseId;
+    }
+
+    public Long getDestinationWarehouseId() {
+        return destinationWarehouseId;
+    }
+
+    public void setDestinationWarehouseId(Long destinationWarehouseId) {
+        this.destinationWarehouseId = destinationWarehouseId;
     }
 
     public ShipmentMode getMode() {

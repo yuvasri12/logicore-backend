@@ -16,6 +16,10 @@ public class ShipmentResponse {
     private String customerName;
     private String origin;
     private String destination;
+    private Long originWarehouseId;
+    private String originWarehouseName;
+    private Long destinationWarehouseId;
+    private String destinationWarehouseName;
     private ShipmentMode mode;
     private BigDecimal weight;
     private ShipmentStatus status;
@@ -69,6 +73,38 @@ public class ShipmentResponse {
 
     public void setDestination(String destination) {
         this.destination = destination;
+    }
+
+    public Long getOriginWarehouseId() {
+        return originWarehouseId;
+    }
+
+    public void setOriginWarehouseId(Long originWarehouseId) {
+        this.originWarehouseId = originWarehouseId;
+    }
+
+    public String getOriginWarehouseName() {
+        return originWarehouseName;
+    }
+
+    public void setOriginWarehouseName(String originWarehouseName) {
+        this.originWarehouseName = originWarehouseName;
+    }
+
+    public Long getDestinationWarehouseId() {
+        return destinationWarehouseId;
+    }
+
+    public void setDestinationWarehouseId(Long destinationWarehouseId) {
+        this.destinationWarehouseId = destinationWarehouseId;
+    }
+
+    public String getDestinationWarehouseName() {
+        return destinationWarehouseName;
+    }
+
+    public void setDestinationWarehouseName(String destinationWarehouseName) {
+        this.destinationWarehouseName = destinationWarehouseName;
     }
 
     public ShipmentMode getMode() {

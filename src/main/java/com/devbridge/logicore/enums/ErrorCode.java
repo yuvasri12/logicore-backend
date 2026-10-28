@@ -18,6 +18,12 @@ public enum ErrorCode {
     CUSTOMER_NAME_EXISTS(HttpStatus.CONFLICT, "error.customer.nameExists"),
     CUSTOMER_REQUIRED(HttpStatus.BAD_REQUEST, "error.customer.required"),
     CUSTOMER_INACTIVE(HttpStatus.CONFLICT, "error.customer.inactive"),
+    WAREHOUSE_NOT_FOUND(HttpStatus.NOT_FOUND, "error.warehouse.notFound"),
+    REGION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.region.notFound"),
+    REGION_CODE_EXISTS(HttpStatus.CONFLICT, "error.region.codeExists"),
+    WAREHOUSE_CODE_EXISTS(HttpStatus.CONFLICT, "error.warehouse.codeExists"),
+    OUT_OF_SCOPE(HttpStatus.FORBIDDEN, "error.scope.outOfScope"),
+    ASSIGNMENT_REQUIRED(HttpStatus.BAD_REQUEST, "error.user.assignmentRequired"),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "error.auth.unauthenticated"),
     BAD_CREDENTIALS(HttpStatus.UNAUTHORIZED, "error.auth.badCredentials"),
     LOGIN_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "error.auth.loginLocked"),
@@ -26,7 +32,6 @@ public enum ErrorCode {
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "error.validation.failed"),
     REQUEST_UNREADABLE(HttpStatus.BAD_REQUEST, "error.request.unreadable"),
     UNEXPECTED(HttpStatus.INTERNAL_SERVER_ERROR, "error.unexpected");
-
     private final HttpStatus status;
     private final String messageKey;
 
@@ -37,4 +42,7 @@ public enum ErrorCode {
 
     public HttpStatus getStatus() { return status; }
     public String getMessageKey() { return messageKey; }
+
+
+
 }

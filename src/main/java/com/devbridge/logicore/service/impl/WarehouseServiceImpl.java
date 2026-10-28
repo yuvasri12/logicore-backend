@@ -23,6 +23,7 @@ import com.devbridge.logicore.repository.StorageLocationRepository;
 import com.devbridge.logicore.repository.WarehouseReceiptRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
 import com.devbridge.logicore.service.WarehouseService;
 import org.slf4j.Logger;
@@ -44,7 +45,8 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final FreightAssignmentRepository freightAssignmentRepository;
     private final StorageLocationRepository storageLocationRepository;
     private final DispatchRepository dispatchRepository;
-    private final AuditService auditService; // NEW
+    private final AuditService auditService;
+    private final ScopeService scopeService;
 
     public WarehouseServiceImpl(
             ShipmentRepository shipmentRepository,
@@ -52,21 +54,21 @@ public class WarehouseServiceImpl implements WarehouseService {
             FreightAssignmentRepository freightAssignmentRepository,
             StorageLocationRepository storageLocationRepository,
             DispatchRepository dispatchRepository,
-            AuditService auditService) { // NEW
+            AuditService auditService,
+            ScopeService scopeService) {
         this.shipmentRepository = shipmentRepository;
         this.warehouseReceiptRepository = warehouseReceiptRepository;
         this.freightAssignmentRepository = freightAssignmentRepository;
         this.storageLocationRepository = storageLocationRepository;
         this.dispatchRepository = dispatchRepository;
-        this.auditService = auditService; // NEW
+        this.auditService = auditService;
+        this.scopeService = scopeService;
     }
 
     @Override
     public WarehouseReceiptResponse receive(WarehouseReceiveRequest request) {
 
-        Shipment shipment = shipmentRepository.findById(request.getShipmentId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        ErrorCode.SHIPMENT_NOT_FOUND, request.getShipmentId()));
+        Shipment shipment = findVisibleShipment(request.getShipmentId());
 
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.RECEIVED);
@@ -87,7 +89,7 @@ public class WarehouseServiceImpl implements WarehouseService {
                 request.getReceivedBy()));
         shipmentRepository.save(shipment);
 
-        // NEW: audit entry, saved in the same transaction as the receipt.
+        // Audit entry, saved in the same transaction as the receipt.
         auditService.record(AuditAction.FREIGHT_RECEIVED, ENTITY_SHIPMENT, shipment.getId(),
                 "tracking=" + shipment.getTrackingNumber()
                         + ", condition=" + request.getCondition()
@@ -109,9 +111,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Override
     public FreightAssignmentResponse assignLocation(AssignLocationRequest request) {
 
-        Shipment shipment = shipmentRepository.findById(request.getShipmentId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        ErrorCode.SHIPMENT_NOT_FOUND, request.getShipmentId()));
+        Shipment shipment = findVisibleShipment(request.getShipmentId());
 
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.IN_WAREHOUSE);
@@ -140,7 +140,6 @@ public class WarehouseServiceImpl implements WarehouseService {
                 request.getAssignedBy()));
         shipmentRepository.save(shipment);
 
-        // NEW: audit entry
         auditService.record(AuditAction.LOCATION_ASSIGNED, ENTITY_SHIPMENT, shipment.getId(),
                 "tracking=" + shipment.getTrackingNumber()
                         + ", location=" + request.getZone() + "/" + request.getRack() + "/" + request.getBin());
@@ -161,9 +160,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Override
     public DispatchResponse dispatch(DispatchRequest request) {
 
-        Shipment shipment = shipmentRepository.findById(request.getShipmentId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        ErrorCode.SHIPMENT_NOT_FOUND, request.getShipmentId()));
+        Shipment shipment = findVisibleShipment(request.getShipmentId());
 
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.IN_TRANSIT);
@@ -183,7 +180,6 @@ public class WarehouseServiceImpl implements WarehouseService {
                 request.getDispatchedBy()));
         shipmentRepository.save(shipment);
 
-        // NEW: audit entry
         auditService.record(AuditAction.SHIPMENT_DISPATCHED, ENTITY_SHIPMENT, shipment.getId(),
                 "tracking=" + shipment.getTrackingNumber()
                         + ", vehicle=" + request.getVehicleNumber()
@@ -199,6 +195,16 @@ public class WarehouseServiceImpl implements WarehouseService {
         log.info("Dispatched: shipmentId={}", shipment.getId());
 
         return response;
+    }
+
+    /** Finds a shipment the current user may see. Outside their scope it is reported as not found. */
+    private Shipment findVisibleShipment(Long id) {
+        Shipment shipment = shipmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.SHIPMENT_NOT_FOUND, id));
+        if (!scopeService.current().canSee(shipment)) {
+            throw new ResourceNotFoundException(ErrorCode.SHIPMENT_NOT_FOUND, id);
+        }
+        return shipment;
     }
 
     private ShipmentStatusHistory buildHistory(ShipmentStatus status, String remarks, String updatedBy) {
