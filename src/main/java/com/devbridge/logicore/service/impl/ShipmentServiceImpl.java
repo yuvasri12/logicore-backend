@@ -19,10 +19,15 @@ import com.devbridge.logicore.message.MessageService;
 import com.devbridge.logicore.model.Customer;
 import com.devbridge.logicore.model.Shipment;
 import com.devbridge.logicore.model.ShipmentStatusHistory;
+import com.devbridge.logicore.model.Warehouse;
 import com.devbridge.logicore.repository.CustomerRepository;
 import com.devbridge.logicore.repository.ShipmentRepository;
+import com.devbridge.logicore.repository.WarehouseRepository;
 import com.devbridge.logicore.security.CurrentUser;
+import com.devbridge.logicore.security.Scope;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.ReceiptHoldService;
+import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
 import org.slf4j.Logger;
@@ -43,17 +48,26 @@ public class ShipmentServiceImpl implements ShipmentService {
 
     private final ShipmentRepository shipmentRepository;
     private final CustomerRepository customerRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final ScopeService scopeService;
     private final MessageService messages;
     private final AuditService audit;
+    private final ReceiptHoldService holds;
 
     public ShipmentServiceImpl(ShipmentRepository shipmentRepository,
                                CustomerRepository customerRepository,
+                               WarehouseRepository warehouseRepository,
+                               ScopeService scopeService,
                                MessageService messages,
-                               AuditService audit) {
+                               AuditService audit,
+                               ReceiptHoldService holds) {
         this.shipmentRepository = shipmentRepository;
         this.customerRepository = customerRepository;
+        this.warehouseRepository = warehouseRepository;
+        this.scopeService = scopeService;
         this.messages = messages;
         this.audit = audit;
+        this.holds = holds;
     }
 
     @Override
@@ -62,6 +76,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         Shipment shipment = new Shipment();
 
         applyCustomer(shipment, request.getCustomerId(), request.getCustomerName());
+        applyWarehouses(shipment, request.getOriginWarehouseId(), request.getDestinationWarehouseId());
 
         shipment.setTrackingNumber("TRK-" + System.currentTimeMillis());
         shipment.setOrigin(request.getOrigin());
@@ -69,6 +84,10 @@ public class ShipmentServiceImpl implements ShipmentService {
         shipment.setMode(request.getMode());
         shipment.setWeight(request.getWeight());
         shipment.setStatus(ShipmentStatus.NEW);
+
+        // The creator must be able to see what they create, so a shipment outside
+        // their own region or warehouse is refused.
+        requireVisible(shipment);
 
         shipment.addStatusHistory(buildHistory(ShipmentStatus.NEW, "Shipment created", "SYSTEM"));
 
@@ -89,7 +108,7 @@ public class ShipmentServiceImpl implements ShipmentService {
             ShipmentMode mode,
             String customerName) {
 
-        List<Shipment> shipments = shipmentRepository.findAll();
+        List<Shipment> shipments = loadVisibleShipments();
         List<ShipmentResponse> responses = new ArrayList<ShipmentResponse>();
 
         for (Shipment shipment : shipments) {
@@ -122,11 +141,15 @@ public class ShipmentServiceImpl implements ShipmentService {
         Shipment shipment = findShipmentOrThrow(id);
 
         applyCustomer(shipment, request.getCustomerId(), request.getCustomerName());
+        applyWarehouses(shipment, request.getOriginWarehouseId(), request.getDestinationWarehouseId());
 
         shipment.setOrigin(request.getOrigin());
         shipment.setDestination(request.getDestination());
         shipment.setMode(request.getMode());
         shipment.setWeight(request.getWeight());
+
+        // After the change, the editor must still be allowed to see this shipment.
+        requireVisible(shipment);
 
         Shipment updatedShipment = shipmentRepository.save(shipment);
 
@@ -163,6 +186,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         return changeStatus(shipment, ShipmentStatus.CANCELLED, request.getReason(), request.getCancelledBy());
     }
 
+    // Public tracking is not scoped: anyone with a tracking number may look it up.
     @Override
     public TrackingResponse getTracking(String trackingNumber) {
 
@@ -199,6 +223,43 @@ public class ShipmentServiceImpl implements ShipmentService {
         return response;
     }
 
+    /** The shipments the current user may see: everything, their region, their warehouse, or nothing. */
+    private List<Shipment> loadVisibleShipments() {
+        Scope scope = scopeService.current();
+        switch (scope.getLevel()) {
+            case ALL:
+                return shipmentRepository.findAll();
+            case REGION:
+                return shipmentRepository.findVisibleToRegion(scope.getRegionId());
+            case WAREHOUSE:
+                return shipmentRepository.findVisibleToWarehouse(scope.getWarehouseId());
+            default:
+                return new ArrayList<Shipment>();
+        }
+    }
+
+    /** Refuses a shipment the current user could not see. */
+    private void requireVisible(Shipment shipment) {
+        if (!scopeService.current().canSee(shipment)) {
+            throw new BusinessException(ErrorCode.OUT_OF_SCOPE);
+        }
+    }
+
+    /** Sets the warehouses when ids are sent. An id that is not sent leaves the value as it was. */
+    private void applyWarehouses(Shipment shipment, Long originId, Long destinationId) {
+        if (originId != null) {
+            shipment.setOriginWarehouse(findWarehouseOrThrow(originId));
+        }
+        if (destinationId != null) {
+            shipment.setDestinationWarehouse(findWarehouseOrThrow(destinationId));
+        }
+    }
+
+    private Warehouse findWarehouseOrThrow(Long id) {
+        return warehouseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.WAREHOUSE_NOT_FOUND, id));
+    }
+
     /**
      * Sets who the shipment is for. A saved customer (customerId) wins and its name is copied
      * onto the shipment. Without an id, a typed name is still accepted. With neither, 400.
@@ -229,10 +290,14 @@ public class ShipmentServiceImpl implements ShipmentService {
     /**
      * The one place a status changes. The rule is checked first, so a refused move
      * changes nothing and writes no history. A successful move also writes one audit row.
+     * Freight received with an open problem cannot be loaded or sent until a manager clears it.
      */
     private ShipmentResponse changeStatus(Shipment shipment, ShipmentStatus to, String remarks, String updatedBy) {
         ShipmentStatus from = shipment.getStatus();
         ShipmentWorkflow.requireMove(shipment.getTrackingNumber(), from, to);
+        if (to == ShipmentStatus.LOADED || to == ShipmentStatus.IN_TRANSIT) {
+            holds.requireNotOnHold(shipment);
+        }
 
         shipment.setStatus(to);
         shipment.addStatusHistory(buildHistory(to, remarks, updatedBy));
@@ -262,9 +327,14 @@ public class ShipmentServiceImpl implements ShipmentService {
         return value != null && !value.trim().isEmpty();
     }
 
+    /** Finds a shipment the current user may see. Outside their scope it is reported as not found. */
     private Shipment findShipmentOrThrow(Long id) {
-        return shipmentRepository.findById(id)
+        Shipment shipment = shipmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.SHIPMENT_NOT_FOUND, id));
+        if (!scopeService.current().canSee(shipment)) {
+            throw new ResourceNotFoundException(ErrorCode.SHIPMENT_NOT_FOUND, id);
+        }
+        return shipment;
     }
 
     private ShipmentStatusHistory buildHistory(ShipmentStatus status, String remarks, String updatedBy) {
@@ -285,9 +355,21 @@ public class ShipmentServiceImpl implements ShipmentService {
         response.setCustomerName(shipment.getCustomerName());
         response.setOrigin(shipment.getOrigin());
         response.setDestination(shipment.getDestination());
+        if (shipment.getOriginWarehouse() != null) {
+            response.setOriginWarehouseId(shipment.getOriginWarehouse().getId());
+            response.setOriginWarehouseName(shipment.getOriginWarehouse().getName());
+        }
+        if (shipment.getDestinationWarehouse() != null) {
+            response.setDestinationWarehouseId(shipment.getDestinationWarehouse().getId());
+            response.setDestinationWarehouseName(shipment.getDestinationWarehouse().getName());
+        }
         response.setMode(shipment.getMode());
         response.setWeight(shipment.getWeight());
         response.setStatus(shipment.getStatus());
+        // A hold only matters before the freight is loaded, so later statuses skip the lookup.
+        boolean beforeLoading = shipment.getStatus() == ShipmentStatus.RECEIVED
+                || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE;
+        response.setOnHold(beforeLoading && holds.isOnHold(shipment));
         response.setCreatedAt(shipment.getCreatedAt());
         response.setUpdatedAt(shipment.getUpdatedAt());
 

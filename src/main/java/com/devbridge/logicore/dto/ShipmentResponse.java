@@ -16,9 +16,15 @@ public class ShipmentResponse {
     private String customerName;
     private String origin;
     private String destination;
+    private Long originWarehouseId;
+    private String originWarehouseName;
+    private Long destinationWarehouseId;
+    private String destinationWarehouseName;
     private ShipmentMode mode;
     private BigDecimal weight;
     private ShipmentStatus status;
+    // True while freight received with a problem has not been cleared by a manager.
+    private boolean onHold;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<StatusHistoryResponse> timeline = new ArrayList<StatusHistoryResponse>();
@@ -71,6 +77,38 @@ public class ShipmentResponse {
         this.destination = destination;
     }
 
+    public Long getOriginWarehouseId() {
+        return originWarehouseId;
+    }
+
+    public void setOriginWarehouseId(Long originWarehouseId) {
+        this.originWarehouseId = originWarehouseId;
+    }
+
+    public String getOriginWarehouseName() {
+        return originWarehouseName;
+    }
+
+    public void setOriginWarehouseName(String originWarehouseName) {
+        this.originWarehouseName = originWarehouseName;
+    }
+
+    public Long getDestinationWarehouseId() {
+        return destinationWarehouseId;
+    }
+
+    public void setDestinationWarehouseId(Long destinationWarehouseId) {
+        this.destinationWarehouseId = destinationWarehouseId;
+    }
+
+    public String getDestinationWarehouseName() {
+        return destinationWarehouseName;
+    }
+
+    public void setDestinationWarehouseName(String destinationWarehouseName) {
+        this.destinationWarehouseName = destinationWarehouseName;
+    }
+
     public ShipmentMode getMode() {
         return mode;
     }
@@ -93,6 +131,14 @@ public class ShipmentResponse {
 
     public void setStatus(ShipmentStatus status) {
         this.status = status;
+    }
+
+    public boolean isOnHold() {
+        return onHold;
+    }
+
+    public void setOnHold(boolean onHold) {
+        this.onHold = onHold;
     }
 
     public LocalDateTime getCreatedAt() {

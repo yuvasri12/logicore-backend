@@ -60,8 +60,11 @@ public class SecurityConfig {
                 .antMatchers(HttpMethod.GET, "/api/shipments/**").authenticated()
                 // user management: admin only
                 .antMatchers("/api/users", "/api/users/**").hasRole(ADMIN)
-                // audit log: admin only                                   // NEW
-                .antMatchers("/api/audit", "/api/audit/**").hasRole(ADMIN) // NEW
+                // audit log: admin only
+                .antMatchers("/api/audit", "/api/audit/**").hasRole(ADMIN)
+                // organisation (regions, warehouses): admin manages, ops manager can read for pickers
+                .antMatchers(HttpMethod.GET, "/api/org/**").hasAnyRole(ADMIN, OPS)
+                .antMatchers("/api/org", "/api/org/**").hasRole(ADMIN)
                 // customers: admin and ops manager
                 .antMatchers("/api/customers", "/api/customers/**").hasAnyRole(ADMIN, OPS)
                 // shipments
@@ -71,6 +74,8 @@ public class SecurityConfig {
                 .antMatchers(HttpMethod.POST, "/api/shipments/*/load").hasAnyRole(ADMIN, OPS, WAREHOUSE)
                 .antMatchers(HttpMethod.POST, "/api/shipments/*/deliver").hasAnyRole(ADMIN, OPS, DISPATCHER)
                 .antMatchers(HttpMethod.DELETE, "/api/shipments/*").hasAnyRole(ADMIN, OPS)
+                // clearing a receiving problem: managers only (must come before the general warehouse rule)
+                .antMatchers(HttpMethod.POST, "/api/warehouse/shipments/*/clear-issue").hasAnyRole(ADMIN, OPS)
                 // warehouse and dispatch
                 .antMatchers(HttpMethod.POST, "/api/warehouse/**").hasAnyRole(ADMIN, OPS, WAREHOUSE)
                 .antMatchers(HttpMethod.POST, "/api/dispatch").hasAnyRole(ADMIN, OPS, DISPATCHER)

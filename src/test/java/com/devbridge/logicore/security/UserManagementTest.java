@@ -1,5 +1,6 @@
 package com.devbridge.logicore.security;
 
+import com.devbridge.logicore.repository.WarehouseRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ class UserManagementTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private WarehouseRepository warehouses;
+
     private MvcResult login(String email, String password) throws Exception {
         String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, password);
         return mockMvc.perform(post("/api/auth/login")
@@ -50,10 +54,12 @@ class UserManagementTest {
         return token("yuvasris531@gmail.com");
     }
 
+    // The roles used here (Dispatcher, Warehouse Staff) must belong to a warehouse.
     private MvcResult createUser(String adminToken, String email, String role) throws Exception {
+        Long chennai = warehouses.findByCodeIgnoreCase("CHN-01").get().getId();
         String body = String.format(
-                "{\"fullName\":\"Test User\",\"email\":\"%s\",\"role\":\"%s\",\"password\":\"%s\"}",
-                email, role, PASSWORD);
+                "{\"fullName\":\"Test User\",\"email\":\"%s\",\"role\":\"%s\",\"password\":\"%s\",\"warehouseId\":%d}",
+                email, role, PASSWORD, chennai);
         return mockMvc.perform(post("/api/users")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -64,7 +70,7 @@ class UserManagementTest {
     void onlyAdminCanListUsers() throws Exception {
         mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
 
-        mockMvc.perform(get("/api/users").header("Authorization", "Bearer " + token("dispatcher@logicore.local")))
+        mockMvc.perform(get("/api/users").header("Authorization", "Bearer " + token("meena.s@logicore.com")))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(get("/api/users").header("Authorization", "Bearer " + adminToken()))

@@ -30,8 +30,8 @@ class AuditApiAccessTest {
 
     private static final String PASSWORD = "ChangeMe@123";
     private static final String ADMIN = "yuvasris531@gmail.com";
-    private static final String OPS = "ops.manager@logicore.local";
-    private static final String WAREHOUSE = "warehouse@logicore.local";
+    private static final String OPS = "priya.nair@logicore.com";
+    private static final String WAREHOUSE = "karthik.raja@logicore.com";
 
     @Autowired
     private MockMvc mockMvc;

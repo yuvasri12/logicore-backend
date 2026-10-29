@@ -56,15 +56,15 @@ class CustomerManagementTest {
         mockMvc.perform(get("/api/customers")).andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer " + token("warehouse@logicore.local")))
+                        .header("Authorization", "Bearer " + token("karthik.raja@logicore.com")))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer " + token("dispatcher@logicore.local")))
+                        .header("Authorization", "Bearer " + token("meena.s@logicore.com")))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer " + token("ops.manager@logicore.local")))
+                        .header("Authorization", "Bearer " + token("priya.nair@logicore.com")))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/customers")
@@ -74,7 +74,7 @@ class CustomerManagementTest {
 
     @Test
     void createCustomer_duplicateNameIsRejected_blankNameIsRejected() throws Exception {
-        String ops = token("ops.manager@logicore.local");
+        String ops = token("priya.nair@logicore.com");
 
         MvcResult created = createCustomer(ops, "Acme Traders");
         org.junit.jupiter.api.Assertions.assertEquals(201, created.getResponse().getStatus());

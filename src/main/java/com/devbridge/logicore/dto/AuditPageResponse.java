@@ -19,9 +19,21 @@ public class AuditPageResponse {
         this.totalPages = totalPages;
     }
 
-    public List<AuditLogResponse> getItems() { return items; }
-    public int getPage() { return page; }
-    public int getSize() { return size; }
-    public long getTotalElements() { return totalElements; }
-    public int getTotalPages() { return totalPages; }
+    public List<AuditLogResponse> getItems() {
+        return items;
+    }
+    public int getPage()
+    {
+        return page;
+    }
+    public int getSize()
+    { return size;
+    }
+    public long getTotalElements()
+    {
+        return totalElements;
+    }
+    public int getTotalPages()
+    { return totalPages;
+    }
 }

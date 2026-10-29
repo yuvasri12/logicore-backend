@@ -8,10 +8,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+// Order 1: users are created first, then OrganizationBootstrap (order 2) assigns them to locations.
 @Component
+@Order(1)
 public class UserBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(UserBootstrap.class);
@@ -51,10 +54,36 @@ public class UserBootstrap implements ApplicationRunner {
             }
         }
         if (demoUsers) {
-            createIfMissing("ops.manager@logicore.local", "Ops Manager", Role.OPS_MANAGER);
-            createIfMissing("warehouse@logicore.local", "Warehouse Staff", Role.WAREHOUSE_STAFF);
-            createIfMissing("dispatcher@logicore.local", "Dispatcher", Role.DISPATCHER);
+            // One-time move from the first demo logins to named accounts. It keeps the password and
+            // the region / warehouse assignment. Safe to leave in; it does nothing once renamed.
+            rename("ops.manager@logicore.local", "priya.nair@logicore.com", "Priya Nair");
+            rename("warehouse@logicore.local", "karthik.raja@logicore.com", "Karthik Raja");
+            rename("dispatcher@logicore.local", "meena.s@logicore.com", "Meena Subramanian");
+            rename("ops.uae@logicore.local", "omar.haddad@logicore.com", "Omar Haddad");
+            rename("warehouse.dxb@logicore.local", "faisal.khan@logicore.com", "Faisal Khan");
+
+            createIfMissing("priya.nair@logicore.com", "Priya Nair", Role.OPS_MANAGER);
+            createIfMissing("karthik.raja@logicore.com", "Karthik Raja", Role.WAREHOUSE_STAFF);
+            createIfMissing("meena.s@logicore.com", "Meena Subramanian", Role.DISPATCHER);
+            // A second region, to show that each person only sees their own area.
+            createIfMissing("omar.haddad@logicore.com", "Omar Haddad", Role.OPS_MANAGER);
+            createIfMissing("faisal.khan@logicore.com", "Faisal Khan", Role.WAREHOUSE_STAFF);
         }
+    }
+
+    /** Renames an old demo user in place, unless the new email is already taken. */
+    private void rename(String oldEmail, String newEmail, String newName) {
+        if (users.existsByEmailIgnoreCase(newEmail)) {
+            return;
+        }
+        AppUser user = users.findByEmailIgnoreCase(oldEmail).orElse(null);
+        if (user == null) {
+            return;
+        }
+        user.setEmail(newEmail.trim().toLowerCase());
+        user.setFullName(newName);
+        users.save(user);
+        log.info("Demo user renamed: id={}", user.getId());
     }
 
     private void createIfMissing(String email, String name, Role role) {

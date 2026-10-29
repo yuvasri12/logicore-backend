@@ -1,5 +1,6 @@
 package com.devbridge.logicore.security;
 
+import com.devbridge.logicore.repository.WarehouseRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ class PasswordManagementTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private WarehouseRepository warehouses;
+
     private MvcResult login(String email, String password) throws Exception {
         String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, password);
         return mockMvc.perform(post("/api/auth/login")
@@ -48,10 +52,12 @@ class PasswordManagementTest {
         return JsonPath.read(login(email, password).getResponse().getContentAsString(), "$.accessToken");
     }
 
+    // The roles used here (Dispatcher, Warehouse Staff) must belong to a warehouse.
     private Integer createUser(String email, String role) throws Exception {
+        Long chennai = warehouses.findByCodeIgnoreCase("CHN-01").get().getId();
         String body = String.format(
-                "{\"fullName\":\"Test User\",\"email\":\"%s\",\"role\":\"%s\",\"password\":\"%s\"}",
-                email, role, PASSWORD);
+                "{\"fullName\":\"Test User\",\"email\":\"%s\",\"role\":\"%s\",\"password\":\"%s\",\"warehouseId\":%d}",
+                email, role, PASSWORD, chennai);
         MvcResult result = mockMvc.perform(post("/api/users")
                 .header("Authorization", "Bearer " + tokenOf("yuvasris531@gmail.com", PASSWORD))
                 .contentType(MediaType.APPLICATION_JSON).content(body)).andReturn();
@@ -132,7 +138,7 @@ class PasswordManagementTest {
     @Test
     void nonAdminCannotResetPasswords() throws Exception {
         Integer id = createUser("pw.target@logicore.local", "WAREHOUSE_STAFF");
-        String dispatcher = tokenOf("dispatcher@logicore.local", PASSWORD);
+        String dispatcher = tokenOf("meena.s@logicore.com", PASSWORD);
         assertEquals(403, resetPassword(dispatcher, id, "Reset@789ab").getResponse().getStatus());
     }
 

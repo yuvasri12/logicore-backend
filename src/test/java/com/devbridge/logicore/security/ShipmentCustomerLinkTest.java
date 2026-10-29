@@ -1,5 +1,6 @@
 package com.devbridge.logicore.security;
 
+import com.devbridge.logicore.repository.WarehouseRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,8 +36,11 @@ class ShipmentCustomerLinkTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private WarehouseRepository warehouses;
+
     private String token() throws Exception {
-        String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", "ops.manager@logicore.local", PASSWORD);
+        String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", "priya.nair@logicore.com", PASSWORD);
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)).andReturn();
@@ -56,7 +60,10 @@ class ShipmentCustomerLinkTest {
     }
 
     private org.springframework.test.web.servlet.ResultActions createShipment(String token, String customerPart) throws Exception {
+        // The Ops Manager works in South India, so the shipment starts at the Chennai hub.
+        Long chennai = warehouses.findByCodeIgnoreCase("CHN-01").get().getId();
         String body = "{" + customerPart + "\"origin\":\"Chennai\",\"destination\":\"Mumbai\","
+                + "\"originWarehouseId\":" + chennai + ","
                 + "\"mode\":\"" + MODE + "\",\"weight\":12.5}";
         return mockMvc.perform(post("/api/shipments")
                 .header("Authorization", "Bearer " + token)

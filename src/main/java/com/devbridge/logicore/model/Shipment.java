@@ -35,6 +35,16 @@ public class Shipment {
     @Column(nullable = false, length = 120)
     private String destination;
 
+    // Where the shipment starts and ends, as warehouses. Optional so older shipments still load.
+    // These decide who may see the shipment (data scoping).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "origin_warehouse_id")
+    private Warehouse originWarehouse;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "destination_warehouse_id")
+    private Warehouse destinationWarehouse;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ShipmentMode mode;
@@ -113,6 +123,22 @@ public class Shipment {
 
     public void setDestination(String destination) {
         this.destination = destination;
+    }
+
+    public Warehouse getOriginWarehouse() {
+        return originWarehouse;
+    }
+
+    public void setOriginWarehouse(Warehouse originWarehouse) {
+        this.originWarehouse = originWarehouse;
+    }
+
+    public Warehouse getDestinationWarehouse() {
+        return destinationWarehouse;
+    }
+
+    public void setDestinationWarehouse(Warehouse destinationWarehouse) {
+        this.destinationWarehouse = destinationWarehouse;
     }
 
     public ShipmentMode getMode() {
