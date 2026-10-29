@@ -15,6 +15,7 @@ import com.devbridge.logicore.model.FreightAssignment;
 import com.devbridge.logicore.model.Shipment;
 import com.devbridge.logicore.model.ShipmentStatusHistory;
 import com.devbridge.logicore.model.StorageLocation;
+import com.devbridge.logicore.model.Warehouse;
 import com.devbridge.logicore.model.WarehouseReceipt;
 import com.devbridge.logicore.repository.DispatchRepository;
 import com.devbridge.logicore.repository.FreightAssignmentRepository;
@@ -23,6 +24,7 @@ import com.devbridge.logicore.repository.StorageLocationRepository;
 import com.devbridge.logicore.repository.WarehouseReceiptRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.ReceiptHoldService;
 import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
 import com.devbridge.logicore.service.WarehouseService;
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -47,6 +50,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final DispatchRepository dispatchRepository;
     private final AuditService auditService;
     private final ScopeService scopeService;
+    private final ReceiptHoldService holds;
 
     public WarehouseServiceImpl(
             ShipmentRepository shipmentRepository,
@@ -55,7 +59,8 @@ public class WarehouseServiceImpl implements WarehouseService {
             StorageLocationRepository storageLocationRepository,
             DispatchRepository dispatchRepository,
             AuditService auditService,
-            ScopeService scopeService) {
+            ScopeService scopeService,
+            ReceiptHoldService holds) {
         this.shipmentRepository = shipmentRepository;
         this.warehouseReceiptRepository = warehouseReceiptRepository;
         this.freightAssignmentRepository = freightAssignmentRepository;
@@ -63,6 +68,7 @@ public class WarehouseServiceImpl implements WarehouseService {
         this.dispatchRepository = dispatchRepository;
         this.auditService = auditService;
         this.scopeService = scopeService;
+        this.holds = holds;
     }
 
     @Override
@@ -116,15 +122,10 @@ public class WarehouseServiceImpl implements WarehouseService {
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.IN_WAREHOUSE);
 
-        StorageLocation location = storageLocationRepository
-                .findByZoneAndRackAndBin(request.getZone(), request.getRack(), request.getBin())
-                .orElseGet(() -> {
-                    StorageLocation newLocation = new StorageLocation();
-                    newLocation.setZone(request.getZone());
-                    newLocation.setRack(request.getRack());
-                    newLocation.setBin(request.getBin());
-                    return storageLocationRepository.save(newLocation);
-                });
+        // The freight is stored at the warehouse where the shipment starts.
+        Warehouse warehouse = shipment.getOriginWarehouse();
+        StorageLocation location = findOrCreateLocation(
+                warehouse, request.getZone(), request.getRack(), request.getBin());
 
         FreightAssignment assignment = new FreightAssignment();
         assignment.setShipment(shipment);
@@ -142,6 +143,7 @@ public class WarehouseServiceImpl implements WarehouseService {
 
         auditService.record(AuditAction.LOCATION_ASSIGNED, ENTITY_SHIPMENT, shipment.getId(),
                 "tracking=" + shipment.getTrackingNumber()
+                        + (warehouse == null ? "" : ", warehouse=" + warehouse.getCode())
                         + ", location=" + request.getZone() + "/" + request.getRack() + "/" + request.getBin());
 
         FreightAssignmentResponse response = new FreightAssignmentResponse();
@@ -164,6 +166,9 @@ public class WarehouseServiceImpl implements WarehouseService {
 
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.IN_TRANSIT);
+
+        // Freight received with an open problem cannot leave until a manager clears it.
+        holds.requireNotOnHold(shipment);
 
         Dispatch dispatch = new Dispatch();
         dispatch.setShipment(shipment);
@@ -195,6 +200,25 @@ public class WarehouseServiceImpl implements WarehouseService {
         log.info("Dispatched: shipmentId={}", shipment.getId());
 
         return response;
+    }
+
+    /**
+     * Finds the bin inside this warehouse, or creates it. The same zone/rack/bin name can exist in
+     * different warehouses. A shipment with no warehouse (old data) uses the old warehouse-less rows.
+     */
+    private StorageLocation findOrCreateLocation(Warehouse warehouse, String zone, String rack, String bin) {
+        Optional<StorageLocation> existing = warehouse == null
+                ? storageLocationRepository.findByWarehouseIsNullAndZoneAndRackAndBin(zone, rack, bin)
+                : storageLocationRepository.findByWarehouseAndZoneAndRackAndBin(warehouse, zone, rack, bin);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        StorageLocation created = new StorageLocation();
+        created.setWarehouse(warehouse);
+        created.setZone(zone);
+        created.setRack(rack);
+        created.setBin(bin);
+        return storageLocationRepository.save(created);
     }
 
     /** Finds a shipment the current user may see. Outside their scope it is reported as not found. */

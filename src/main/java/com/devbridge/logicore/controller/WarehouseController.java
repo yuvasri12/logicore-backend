@@ -1,6 +1,7 @@
 package com.devbridge.logicore.controller;
 
 import com.devbridge.logicore.dto.*;
+import com.devbridge.logicore.service.ReceiptHoldService;
 import com.devbridge.logicore.service.WarehouseService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -12,9 +13,11 @@ import javax.validation.Valid;
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
+    private final ReceiptHoldService receiptHoldService;
 
-    public WarehouseController(WarehouseService warehouseService) {
+    public WarehouseController(WarehouseService warehouseService, ReceiptHoldService receiptHoldService) {
         this.warehouseService = warehouseService;
+        this.receiptHoldService = receiptHoldService;
     }
 
     @PostMapping("/warehouse/receive")
@@ -27,6 +30,13 @@ public class WarehouseController {
     @ResponseStatus(HttpStatus.CREATED)
     public FreightAssignmentResponse assignLocation(@Valid @RequestBody AssignLocationRequest request) {
         return warehouseService.assignLocation(request);
+    }
+
+    /** Ops Manager or Admin accepts a receiving problem so the shipment can move on. */
+    @PostMapping("/warehouse/shipments/{shipmentId}/clear-issue")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clearIssue(@PathVariable Long shipmentId, @Valid @RequestBody ClearIssueRequest request) {
+        receiptHoldService.clearIssue(shipmentId, request.getNote());
     }
 
     @PostMapping("/dispatch")

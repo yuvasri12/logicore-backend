@@ -74,6 +74,8 @@ public class SecurityConfig {
                 .antMatchers(HttpMethod.POST, "/api/shipments/*/load").hasAnyRole(ADMIN, OPS, WAREHOUSE)
                 .antMatchers(HttpMethod.POST, "/api/shipments/*/deliver").hasAnyRole(ADMIN, OPS, DISPATCHER)
                 .antMatchers(HttpMethod.DELETE, "/api/shipments/*").hasAnyRole(ADMIN, OPS)
+                // clearing a receiving problem: managers only (must come before the general warehouse rule)
+                .antMatchers(HttpMethod.POST, "/api/warehouse/shipments/*/clear-issue").hasAnyRole(ADMIN, OPS)
                 // warehouse and dispatch
                 .antMatchers(HttpMethod.POST, "/api/warehouse/**").hasAnyRole(ADMIN, OPS, WAREHOUSE)
                 .antMatchers(HttpMethod.POST, "/api/dispatch").hasAnyRole(ADMIN, OPS, DISPATCHER)

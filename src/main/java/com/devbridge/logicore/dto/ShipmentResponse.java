@@ -23,6 +23,8 @@ public class ShipmentResponse {
     private ShipmentMode mode;
     private BigDecimal weight;
     private ShipmentStatus status;
+    // True while freight received with a problem has not been cleared by a manager.
+    private boolean onHold;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<StatusHistoryResponse> timeline = new ArrayList<StatusHistoryResponse>();
@@ -129,6 +131,14 @@ public class ShipmentResponse {
 
     public void setStatus(ShipmentStatus status) {
         this.status = status;
+    }
+
+    public boolean isOnHold() {
+        return onHold;
+    }
+
+    public void setOnHold(boolean onHold) {
+        this.onHold = onHold;
     }
 
     public LocalDateTime getCreatedAt() {

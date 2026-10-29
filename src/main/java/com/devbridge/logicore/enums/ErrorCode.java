@@ -8,6 +8,8 @@ public enum ErrorCode {
     TRACKING_NOT_FOUND(HttpStatus.NOT_FOUND, "error.tracking.notFound"),
     INVALID_STATUS_TRANSITION(HttpStatus.CONFLICT, "error.shipment.invalidTransition"),
     DUPLICATE_ACTION(HttpStatus.CONFLICT, "error.shipment.duplicateAction"),
+    FREIGHT_ON_HOLD(HttpStatus.CONFLICT, "error.receipt.onHold"),
+    NO_OPEN_ISSUE(HttpStatus.CONFLICT, "error.receipt.noOpenIssue"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.user.notFound"),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.user.emailExists"),
     USER_SELF_CHANGE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.user.selfChange"),
@@ -32,6 +34,7 @@ public enum ErrorCode {
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "error.validation.failed"),
     REQUEST_UNREADABLE(HttpStatus.BAD_REQUEST, "error.request.unreadable"),
     UNEXPECTED(HttpStatus.INTERNAL_SERVER_ERROR, "error.unexpected");
+
     private final HttpStatus status;
     private final String messageKey;
 
@@ -42,7 +45,4 @@ public enum ErrorCode {
 
     public HttpStatus getStatus() { return status; }
     public String getMessageKey() { return messageKey; }
-
-
-
 }

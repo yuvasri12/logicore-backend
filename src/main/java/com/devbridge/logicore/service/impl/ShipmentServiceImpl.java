@@ -26,6 +26,7 @@ import com.devbridge.logicore.repository.WarehouseRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.security.Scope;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.ReceiptHoldService;
 import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
@@ -51,19 +52,22 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final ScopeService scopeService;
     private final MessageService messages;
     private final AuditService audit;
+    private final ReceiptHoldService holds;
 
     public ShipmentServiceImpl(ShipmentRepository shipmentRepository,
                                CustomerRepository customerRepository,
                                WarehouseRepository warehouseRepository,
                                ScopeService scopeService,
                                MessageService messages,
-                               AuditService audit) {
+                               AuditService audit,
+                               ReceiptHoldService holds) {
         this.shipmentRepository = shipmentRepository;
         this.customerRepository = customerRepository;
         this.warehouseRepository = warehouseRepository;
         this.scopeService = scopeService;
         this.messages = messages;
         this.audit = audit;
+        this.holds = holds;
     }
 
     @Override
@@ -286,10 +290,14 @@ public class ShipmentServiceImpl implements ShipmentService {
     /**
      * The one place a status changes. The rule is checked first, so a refused move
      * changes nothing and writes no history. A successful move also writes one audit row.
+     * Freight received with an open problem cannot be loaded or sent until a manager clears it.
      */
     private ShipmentResponse changeStatus(Shipment shipment, ShipmentStatus to, String remarks, String updatedBy) {
         ShipmentStatus from = shipment.getStatus();
         ShipmentWorkflow.requireMove(shipment.getTrackingNumber(), from, to);
+        if (to == ShipmentStatus.LOADED || to == ShipmentStatus.IN_TRANSIT) {
+            holds.requireNotOnHold(shipment);
+        }
 
         shipment.setStatus(to);
         shipment.addStatusHistory(buildHistory(to, remarks, updatedBy));
@@ -358,6 +366,10 @@ public class ShipmentServiceImpl implements ShipmentService {
         response.setMode(shipment.getMode());
         response.setWeight(shipment.getWeight());
         response.setStatus(shipment.getStatus());
+        // A hold only matters before the freight is loaded, so later statuses skip the lookup.
+        boolean beforeLoading = shipment.getStatus() == ShipmentStatus.RECEIVED
+                || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE;
+        response.setOnHold(beforeLoading && holds.isOnHold(shipment));
         response.setCreatedAt(shipment.getCreatedAt());
         response.setUpdatedAt(shipment.getUpdatedAt());
 
