@@ -21,10 +21,14 @@ public class ShipmentResponse {
     private Long destinationWarehouseId;
     private String destinationWarehouseName;
     private ShipmentMode mode;
+    // Air waybill, container or bill of lading number (optional).
+    private String referenceNumber;
     private BigDecimal weight;
     private ShipmentStatus status;
     // True while freight received with a problem has not been cleared by a manager.
     private boolean onHold;
+    // NOT_REQUIRED, PENDING or CLEARED: customs for shipments that cross a country border.
+    private String customsStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<StatusHistoryResponse> timeline = new ArrayList<StatusHistoryResponse>();
@@ -117,6 +121,14 @@ public class ShipmentResponse {
         this.mode = mode;
     }
 
+    public String getReferenceNumber() {
+        return referenceNumber;
+    }
+
+    public void setReferenceNumber(String referenceNumber) {
+        this.referenceNumber = referenceNumber;
+    }
+
     public BigDecimal getWeight() {
         return weight;
     }
@@ -139,6 +151,14 @@ public class ShipmentResponse {
 
     public void setOnHold(boolean onHold) {
         this.onHold = onHold;
+    }
+
+    public String getCustomsStatus() {
+        return customsStatus;
+    }
+
+    public void setCustomsStatus(String customsStatus) {
+        this.customsStatus = customsStatus;
     }
 
     public LocalDateTime getCreatedAt() {

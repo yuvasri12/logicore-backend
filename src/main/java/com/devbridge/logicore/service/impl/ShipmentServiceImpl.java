@@ -26,6 +26,7 @@ import com.devbridge.logicore.repository.WarehouseRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.security.Scope;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.CustomsService;
 import com.devbridge.logicore.service.ReceiptHoldService;
 import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentService;
@@ -53,6 +54,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final MessageService messages;
     private final AuditService audit;
     private final ReceiptHoldService holds;
+    private final CustomsService customs;
 
     public ShipmentServiceImpl(ShipmentRepository shipmentRepository,
                                CustomerRepository customerRepository,
@@ -60,7 +62,8 @@ public class ShipmentServiceImpl implements ShipmentService {
                                ScopeService scopeService,
                                MessageService messages,
                                AuditService audit,
-                               ReceiptHoldService holds) {
+                               ReceiptHoldService holds,
+                               CustomsService customs) {
         this.shipmentRepository = shipmentRepository;
         this.customerRepository = customerRepository;
         this.warehouseRepository = warehouseRepository;
@@ -68,6 +71,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         this.messages = messages;
         this.audit = audit;
         this.holds = holds;
+        this.customs = customs;
     }
 
     @Override
@@ -82,6 +86,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         shipment.setOrigin(request.getOrigin());
         shipment.setDestination(request.getDestination());
         shipment.setMode(request.getMode());
+        shipment.setReferenceNumber(cleanReference(request.getReferenceNumber()));
         shipment.setWeight(request.getWeight());
         shipment.setStatus(ShipmentStatus.NEW);
 
@@ -146,6 +151,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         shipment.setOrigin(request.getOrigin());
         shipment.setDestination(request.getDestination());
         shipment.setMode(request.getMode());
+        shipment.setReferenceNumber(cleanReference(request.getReferenceNumber()));
         shipment.setWeight(request.getWeight());
 
         // After the change, the editor must still be allowed to see this shipment.
@@ -287,16 +293,23 @@ public class ShipmentServiceImpl implements ShipmentService {
         }
     }
 
+    /** A blank reference number is stored as empty (null). */
+    private String cleanReference(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
     /**
      * The one place a status changes. The rule is checked first, so a refused move
      * changes nothing and writes no history. A successful move also writes one audit row.
-     * Freight received with an open problem cannot be loaded or sent until a manager clears it.
+     * Before a shipment is loaded or sent, any receiving problem must be cleared by a manager
+     * and an international shipment must be cleared through customs.
      */
     private ShipmentResponse changeStatus(Shipment shipment, ShipmentStatus to, String remarks, String updatedBy) {
         ShipmentStatus from = shipment.getStatus();
         ShipmentWorkflow.requireMove(shipment.getTrackingNumber(), from, to);
         if (to == ShipmentStatus.LOADED || to == ShipmentStatus.IN_TRANSIT) {
             holds.requireNotOnHold(shipment);
+            customs.requireCleared(shipment);
         }
 
         shipment.setStatus(to);
@@ -364,12 +377,14 @@ public class ShipmentServiceImpl implements ShipmentService {
             response.setDestinationWarehouseName(shipment.getDestinationWarehouse().getName());
         }
         response.setMode(shipment.getMode());
+        response.setReferenceNumber(shipment.getReferenceNumber());
         response.setWeight(shipment.getWeight());
         response.setStatus(shipment.getStatus());
         // A hold only matters before the freight is loaded, so later statuses skip the lookup.
         boolean beforeLoading = shipment.getStatus() == ShipmentStatus.RECEIVED
                 || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE;
         response.setOnHold(beforeLoading && holds.isOnHold(shipment));
+        response.setCustomsStatus(customs.statusOf(shipment));
         response.setCreatedAt(shipment.getCreatedAt());
         response.setUpdatedAt(shipment.getUpdatedAt());
 

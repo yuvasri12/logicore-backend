@@ -10,10 +10,9 @@ import java.math.BigDecimal;
 
 public class UpdateShipmentRequest {
 
-    // Send customerId to use a saved customer. A typed customerName still works if no id is sent.
     private Long customerId;
 
-    @Size(max = 120, message = "{validation.size.max}")
+    @Size(max = 120)
     private String customerName;
 
     @NotBlank
@@ -22,13 +21,16 @@ public class UpdateShipmentRequest {
     @NotBlank
     private String destination;
 
-    // Where the shipment starts and ends, as warehouses. They decide who may see it.
     private Long originWarehouseId;
 
     private Long destinationWarehouseId;
 
     @NotNull
     private ShipmentMode mode;
+
+    // Optional: air waybill, container or bill of lading number.
+    @Size(max = 40)
+    private String referenceNumber;
 
     @NotNull
     @DecimalMin("0.01")
@@ -88,6 +90,14 @@ public class UpdateShipmentRequest {
 
     public void setMode(ShipmentMode mode) {
         this.mode = mode;
+    }
+
+    public String getReferenceNumber() {
+        return referenceNumber;
+    }
+
+    public void setReferenceNumber(String referenceNumber) {
+        this.referenceNumber = referenceNumber;
     }
 
     public BigDecimal getWeight() {

@@ -24,6 +24,7 @@ import com.devbridge.logicore.repository.StorageLocationRepository;
 import com.devbridge.logicore.repository.WarehouseReceiptRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.service.AuditService;
+import com.devbridge.logicore.service.CustomsService;
 import com.devbridge.logicore.service.ReceiptHoldService;
 import com.devbridge.logicore.service.ScopeService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
@@ -51,6 +52,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final AuditService auditService;
     private final ScopeService scopeService;
     private final ReceiptHoldService holds;
+    private final CustomsService customs;
 
     public WarehouseServiceImpl(
             ShipmentRepository shipmentRepository,
@@ -60,7 +62,8 @@ public class WarehouseServiceImpl implements WarehouseService {
             DispatchRepository dispatchRepository,
             AuditService auditService,
             ScopeService scopeService,
-            ReceiptHoldService holds) {
+            ReceiptHoldService holds,
+            CustomsService customs) {
         this.shipmentRepository = shipmentRepository;
         this.warehouseReceiptRepository = warehouseReceiptRepository;
         this.freightAssignmentRepository = freightAssignmentRepository;
@@ -69,6 +72,7 @@ public class WarehouseServiceImpl implements WarehouseService {
         this.auditService = auditService;
         this.scopeService = scopeService;
         this.holds = holds;
+        this.customs = customs;
     }
 
     @Override
@@ -167,8 +171,10 @@ public class WarehouseServiceImpl implements WarehouseService {
         ShipmentWorkflow.requireMove(
                 shipment.getTrackingNumber(), shipment.getStatus(), ShipmentStatus.IN_TRANSIT);
 
-        // Freight received with an open problem cannot leave until a manager clears it.
+        // Freight with an open receiving problem, or an international shipment that has not
+        // cleared customs, cannot leave.
         holds.requireNotOnHold(shipment);
+        customs.requireCleared(shipment);
 
         Dispatch dispatch = new Dispatch();
         dispatch.setShipment(shipment);

@@ -49,6 +49,10 @@ public class Shipment {
     @Column(nullable = false, length = 30)
     private ShipmentMode mode;
 
+    // Optional carrier document number: air waybill (air), container or bill of lading (ocean).
+    @Column(length = 40)
+    private String referenceNumber;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal weight;
 
@@ -147,6 +151,14 @@ public class Shipment {
 
     public void setMode(ShipmentMode mode) {
         this.mode = mode;
+    }
+
+    public String getReferenceNumber() {
+        return referenceNumber;
+    }
+
+    public void setReferenceNumber(String referenceNumber) {
+        this.referenceNumber = referenceNumber;
     }
 
     public BigDecimal getWeight() {

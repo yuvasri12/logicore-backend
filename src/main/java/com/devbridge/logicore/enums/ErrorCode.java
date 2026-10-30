@@ -10,6 +10,8 @@ public enum ErrorCode {
     DUPLICATE_ACTION(HttpStatus.CONFLICT, "error.shipment.duplicateAction"),
     FREIGHT_ON_HOLD(HttpStatus.CONFLICT, "error.receipt.onHold"),
     NO_OPEN_ISSUE(HttpStatus.CONFLICT, "error.receipt.noOpenIssue"),
+    CUSTOMS_NOT_CLEARED(HttpStatus.CONFLICT, "error.customs.notCleared"),
+    CUSTOMS_NOT_REQUIRED(HttpStatus.CONFLICT, "error.customs.notRequired"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.user.notFound"),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.user.emailExists"),
     USER_SELF_CHANGE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.user.selfChange"),
