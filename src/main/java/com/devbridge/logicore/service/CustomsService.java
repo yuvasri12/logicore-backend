@@ -14,6 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * One rule: a shipment that crosses a country border needs customs clearance before it can be
@@ -65,6 +72,29 @@ public class CustomsService {
             return NOT_REQUIRED;
         }
         return clearanceRepository.existsByShipment(shipment) ? CLEARED : PENDING;
+    }
+
+    /** The same answer for many shipments at once, using a single query. Key = shipment id. */
+    @Transactional(readOnly = true)
+    public Map<Long, String> statusesOf(Collection<Shipment> shipments) {
+        Map<Long, String> result = new HashMap<Long, String>();
+        List<Long> international = new ArrayList<Long>();
+        for (Shipment shipment : shipments) {
+            if (isRequired(shipment)) {
+                international.add(shipment.getId());
+            } else {
+                result.put(shipment.getId(), NOT_REQUIRED);
+            }
+        }
+
+        Set<Long> cleared = new HashSet<Long>();
+        if (!international.isEmpty()) {
+            cleared.addAll(clearanceRepository.findClearedShipmentIds(international));
+        }
+        for (Long id : international) {
+            result.put(id, cleared.contains(id) ? CLEARED : PENDING);
+        }
+        return result;
     }
 
     /** Throws CUSTOMS_NOT_CLEARED (HTTP 409) while an international shipment is not cleared. */

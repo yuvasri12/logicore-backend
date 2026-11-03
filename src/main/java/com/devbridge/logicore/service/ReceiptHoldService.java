@@ -2,18 +2,25 @@ package com.devbridge.logicore.service;
 
 import com.devbridge.logicore.enums.AuditAction;
 import com.devbridge.logicore.enums.ErrorCode;
+import com.devbridge.logicore.enums.ShipmentStatus;
 import com.devbridge.logicore.exception.BusinessException;
 import com.devbridge.logicore.exception.ResourceNotFoundException;
 import com.devbridge.logicore.model.Shipment;
 import com.devbridge.logicore.model.WarehouseReceipt;
 import com.devbridge.logicore.repository.ShipmentRepository;
+import com.devbridge.logicore.repository.WarehouseReceiptLookupRepository;
 import com.devbridge.logicore.repository.WarehouseReceiptRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One rule: freight received with a problem is on hold until an Ops Manager or Admin clears it.
@@ -26,15 +33,18 @@ public class ReceiptHoldService {
     private static final String ENTITY_SHIPMENT = "SHIPMENT";
 
     private final WarehouseReceiptRepository receiptRepository;
+    private final WarehouseReceiptLookupRepository lookupRepository;
     private final ShipmentRepository shipmentRepository;
     private final ScopeService scopeService;
     private final AuditService auditService;
 
     public ReceiptHoldService(WarehouseReceiptRepository receiptRepository,
+                              WarehouseReceiptLookupRepository lookupRepository,
                               ShipmentRepository shipmentRepository,
                               ScopeService scopeService,
                               AuditService auditService) {
         this.receiptRepository = receiptRepository;
+        this.lookupRepository = lookupRepository;
         this.shipmentRepository = shipmentRepository;
         this.scopeService = scopeService;
         this.auditService = auditService;
@@ -44,6 +54,36 @@ public class ReceiptHoldService {
     public boolean isOnHold(Shipment shipment) {
         Optional<WarehouseReceipt> latest = receiptRepository.findFirstByShipmentOrderByReceivedAtDescIdDesc(shipment);
         return latest.isPresent() && latest.get().hasOpenIssue();
+    }
+
+    /**
+     * The ids of the shipments that are on hold, for many shipments at once (one query).
+     * A hold only matters before loading, so other statuses are skipped.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> onHoldAmong(Collection<Shipment> shipments) {
+        List<Long> ids = new ArrayList<Long>();
+        for (Shipment shipment : shipments) {
+            if (shipment.getStatus() == ShipmentStatus.RECEIVED
+                    || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE) {
+                ids.add(shipment.getId());
+            }
+        }
+
+        Set<Long> onHold = new HashSet<Long>();
+        if (ids.isEmpty()) {
+            return onHold;
+        }
+
+        // Newest receipt first: the first one seen for a shipment is its latest.
+        Set<Long> seen = new HashSet<Long>();
+        for (WarehouseReceipt receipt : lookupRepository.findForShipments(ids)) {
+            Long shipmentId = receipt.getShipment().getId();
+            if (seen.add(shipmentId) && receipt.hasOpenIssue()) {
+                onHold.add(shipmentId);
+            }
+        }
+        return onHold;
     }
 
     /** Throws FREIGHT_ON_HOLD (HTTP 409) while the latest receipt has an open issue. */

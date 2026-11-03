@@ -15,6 +15,16 @@ public interface ShipmentService {
             ShipmentMode mode,
             String customerName);
 
+    /** One page of the shipments the user may see. Filters, search and sorting run in the database. */
+    PagedResponse<ShipmentResponse> searchShipments(
+            ShipmentStatus status,
+            ShipmentMode mode,
+            String text,
+            int page,
+            int size,
+            String sortBy,
+            String dir);
+
     ShipmentResponse getShipment(Long id);
 
     ShipmentResponse updateShipment(

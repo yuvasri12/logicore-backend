@@ -34,6 +34,19 @@ public class ShipmentController {
         return shipmentService.listShipments(status, mode, customerName);
     }
 
+    /** One page of shipments, with filters, text search and sorting done in the database. */
+    @GetMapping("/search")
+    public PagedResponse<ShipmentResponse> searchShipments(
+            @RequestParam(required = false) ShipmentStatus status,
+            @RequestParam(required = false) ShipmentMode mode,
+            @RequestParam(required = false, name = "q") String text,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String dir) {
+        return shipmentService.searchShipments(status, mode, text, page, size, sortBy, dir);
+    }
+
     @GetMapping("/{id}")
     public ShipmentResponse getShipment(@PathVariable Long id) {
         return shipmentService.getShipment(id);

@@ -2,6 +2,7 @@ package com.devbridge.logicore.service.impl;
 
 import com.devbridge.logicore.dto.CancelShipmentRequest;
 import com.devbridge.logicore.dto.CreateShipmentRequest;
+import com.devbridge.logicore.dto.PagedResponse;
 import com.devbridge.logicore.dto.ShipmentActionRequest;
 import com.devbridge.logicore.dto.ShipmentResponse;
 import com.devbridge.logicore.dto.StatusHistoryResponse;
@@ -22,6 +23,8 @@ import com.devbridge.logicore.model.ShipmentStatusHistory;
 import com.devbridge.logicore.model.Warehouse;
 import com.devbridge.logicore.repository.CustomerRepository;
 import com.devbridge.logicore.repository.ShipmentRepository;
+import com.devbridge.logicore.repository.ShipmentSearchRepository;
+import com.devbridge.logicore.repository.ShipmentSpecs;
 import com.devbridge.logicore.repository.WarehouseRepository;
 import com.devbridge.logicore.security.CurrentUser;
 import com.devbridge.logicore.security.Scope;
@@ -33,12 +36,21 @@ import com.devbridge.logicore.service.ShipmentService;
 import com.devbridge.logicore.service.ShipmentWorkflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -47,7 +59,13 @@ public class ShipmentServiceImpl implements ShipmentService {
     private static final Logger log = LoggerFactory.getLogger(ShipmentServiceImpl.class);
     private static final String ENTITY = "SHIPMENT";
 
+    // Paging limits, and the only columns a client may sort by.
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final Set<String> SORTABLE = new HashSet<String>(
+            Arrays.asList("trackingNumber", "customerName", "createdAt", "status"));
+
     private final ShipmentRepository shipmentRepository;
+    private final ShipmentSearchRepository searchRepository;
     private final CustomerRepository customerRepository;
     private final WarehouseRepository warehouseRepository;
     private final ScopeService scopeService;
@@ -57,6 +75,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final CustomsService customs;
 
     public ShipmentServiceImpl(ShipmentRepository shipmentRepository,
+                               ShipmentSearchRepository searchRepository,
                                CustomerRepository customerRepository,
                                WarehouseRepository warehouseRepository,
                                ScopeService scopeService,
@@ -65,6 +84,7 @@ public class ShipmentServiceImpl implements ShipmentService {
                                ReceiptHoldService holds,
                                CustomsService customs) {
         this.shipmentRepository = shipmentRepository;
+        this.searchRepository = searchRepository;
         this.customerRepository = customerRepository;
         this.warehouseRepository = warehouseRepository;
         this.scopeService = scopeService;
@@ -114,7 +134,7 @@ public class ShipmentServiceImpl implements ShipmentService {
             String customerName) {
 
         List<Shipment> shipments = loadVisibleShipments();
-        List<ShipmentResponse> responses = new ArrayList<ShipmentResponse>();
+        List<Shipment> matching = new ArrayList<Shipment>();
 
         for (Shipment shipment : shipments) {
             if (status != null && shipment.getStatus() != status) {
@@ -128,10 +148,47 @@ public class ShipmentServiceImpl implements ShipmentService {
                     || !shipment.getCustomerName().toLowerCase().contains(customerName.toLowerCase()))) {
                 continue;
             }
-            responses.add(mapToResponse(shipment));
+            matching.add(shipment);
         }
 
-        return responses;
+        return toResponses(matching, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PagedResponse<ShipmentResponse> searchShipments(
+            ShipmentStatus status,
+            ShipmentMode mode,
+            String text,
+            int page,
+            int size,
+            String sortBy,
+            String dir) {
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        String property = SORTABLE.contains(sortBy) ? sortBy : "createdAt";
+        Sort.Direction direction = "asc".equalsIgnoreCase(dir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        // The id is a tie-breaker, so rows with equal values never jump between pages.
+        Sort sort = Sort.by(direction, property).and(Sort.by(Sort.Direction.DESC, "id"));
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
+
+        Specification<Shipment> spec = Specification
+                .where(ShipmentSpecs.visibleTo(scopeService.current()))
+                .and(ShipmentSpecs.hasStatus(status))
+                .and(ShipmentSpecs.hasMode(mode))
+                .and(ShipmentSpecs.matches(text))
+                .and(ShipmentSpecs.withWarehouses());
+
+        Page<Shipment> result = searchRepository.findAll(spec, pageable);
+
+        // Page rows skip the full status timeline; GET /api/shipments/{id} still has it.
+        return new PagedResponse<ShipmentResponse>(
+                toResponses(result.getContent(), false),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages());
     }
 
     @Override
@@ -359,7 +416,33 @@ public class ShipmentServiceImpl implements ShipmentService {
         return history;
     }
 
+    /** One shipment, with its full timeline. Used by the single-shipment endpoints. */
     private ShipmentResponse mapToResponse(Shipment shipment) {
+        // A hold only matters before the freight is loaded, so later statuses skip the lookup.
+        boolean beforeLoading = shipment.getStatus() == ShipmentStatus.RECEIVED
+                || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE;
+        boolean onHold = beforeLoading && holds.isOnHold(shipment);
+        return toResponse(shipment, onHold, customs.statusOf(shipment), true);
+    }
+
+    /** Many shipments: the hold flags and customs statuses are each read with one query. */
+    private List<ShipmentResponse> toResponses(List<Shipment> shipments, boolean includeTimeline) {
+        Set<Long> onHold = holds.onHoldAmong(shipments);
+        Map<Long, String> customsStatuses = customs.statusesOf(shipments);
+
+        List<ShipmentResponse> responses = new ArrayList<ShipmentResponse>();
+        for (Shipment shipment : shipments) {
+            responses.add(toResponse(
+                    shipment,
+                    onHold.contains(shipment.getId()),
+                    customsStatuses.get(shipment.getId()),
+                    includeTimeline));
+        }
+        return responses;
+    }
+
+    private ShipmentResponse toResponse(Shipment shipment, boolean onHold, String customsStatus,
+                                        boolean includeTimeline) {
         ShipmentResponse response = new ShipmentResponse();
 
         response.setId(shipment.getId());
@@ -380,25 +463,24 @@ public class ShipmentServiceImpl implements ShipmentService {
         response.setReferenceNumber(shipment.getReferenceNumber());
         response.setWeight(shipment.getWeight());
         response.setStatus(shipment.getStatus());
-        // A hold only matters before the freight is loaded, so later statuses skip the lookup.
-        boolean beforeLoading = shipment.getStatus() == ShipmentStatus.RECEIVED
-                || shipment.getStatus() == ShipmentStatus.IN_WAREHOUSE;
-        response.setOnHold(beforeLoading && holds.isOnHold(shipment));
-        response.setCustomsStatus(customs.statusOf(shipment));
+        response.setOnHold(onHold);
+        response.setCustomsStatus(customsStatus);
         response.setCreatedAt(shipment.getCreatedAt());
         response.setUpdatedAt(shipment.getUpdatedAt());
 
-        List<StatusHistoryResponse> timeline = new ArrayList<StatusHistoryResponse>();
-        for (ShipmentStatusHistory history : shipment.getStatusHistory()) {
-            StatusHistoryResponse entry = new StatusHistoryResponse();
-            entry.setId(history.getId());
-            entry.setStatus(history.getStatus());
-            entry.setRemarks(history.getRemarks());
-            entry.setUpdatedBy(history.getUpdatedBy());
-            entry.setUpdatedAt(history.getUpdatedAt());
-            timeline.add(entry);
+        if (includeTimeline) {
+            List<StatusHistoryResponse> timeline = new ArrayList<StatusHistoryResponse>();
+            for (ShipmentStatusHistory history : shipment.getStatusHistory()) {
+                StatusHistoryResponse entry = new StatusHistoryResponse();
+                entry.setId(history.getId());
+                entry.setStatus(history.getStatus());
+                entry.setRemarks(history.getRemarks());
+                entry.setUpdatedBy(history.getUpdatedBy());
+                entry.setUpdatedAt(history.getUpdatedAt());
+                timeline.add(entry);
+            }
+            response.setTimeline(timeline);
         }
-        response.setTimeline(timeline);
 
         return response;
     }
