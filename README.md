@@ -138,4 +138,4 @@ src/main/resources/messages.properties   all user-facing text
 
 ## Author
 
-Built by Yuvasri as a full-stack learning and showcase project.
+Built by Yuvasri as a full-stack learning project.
